@@ -1,0 +1,188 @@
+defVar --name drive --type FileSystem
+defVar --name files --type List --innertype String
+defVar --name myDocs --type String
+defVar --name file --type String
+defVar --name filename --type String
+defVar --name test --type FileSystem
+defVar --name FolderDirectory --type String
+defVar --name fileToCopyDirectory --type String
+defVar --name pdfpath --type String
+defVar --name getFilename --type List --innertype String
+defVar --name BOLDirectory --type String --value "IBMFiles/BOL"
+defVar --name filepath --type String
+defVar --name filePdfOpened --type Pdf
+defVar --name pathFilePdf --type String
+defVar --name Directory --type String
+defVar --name numberOfPages --type Numeric
+defVar --name pagecount --type Numeric
+defVar --name subpdf --type Pdf
+defVar --name documents --type List --innertype String
+defVar --name counter_items --type Numeric
+defVar --name InvoiceDirectory --type String --value "IBMFiles/Invoice"
+defVar --name DrivercopyDirectory --type String --value "IBMFiles/DriverCopy"
+defVar --name bolPaths --type List --innertype String
+defVar --name bolFile --type String
+defVar --name bolfile1 --type Pdf
+defVar --name extractedTable --type DataTable
+defVar --name documentType --type String
+defVar --name ExtractedInformation --type String
+defVar --name BOLInformation --type DataTable
+defVar --name success --type Boolean
+defVar --name InvoiceInfromation --type DataTable
+defVar --name DriverInformation --type DataTable
+defVar --name pdf_base64 --type String
+defVar --name document_path --type String
+defVar --name response --type String
+defVar --name waiting_time --type TimeSpan --value "00:05:00"
+defVar --name output --type String --value "ALL THE FILES ARE PROCESSED SUCCESSFULLY." --output
+defVar --name statuscode --type Numeric
+defVar --name document --type List --innertype String
+defVar --name drivefilename --type String
+defVar --name names --type List --innertype String
+defVar --name mailID --type String
+defVar --name doc_sender_mail --type List --innertype String
+defVar --name BOLNumber --type String
+defVar --name outlookConnection --type EmailConnection
+defVar --name InvoiceNumber --type String
+defVar --name OrderNumber --type String
+defVar --name final_sender_mail --type String
+microsoftMailConnect --connection pranay_outlook_microsoft_outlook_email outlookConnection=value
+googleDriveConnect --name pranay_google_drive drive=value
+getSpecialFolder --folder "MyDocuments" myDocs=value
+setVar --name "${myDocs}" --value "${myDocs}\\IBMTesting"
+replaceText --texttoparse "${myDocs}" --textpattern "\\" --replacement "\\\\" FolderDirectory=value
+messageBox --title test --text "${FolderDirectory}" --icon "Information" --buttons "OK" --defaultbutton "FirstButton"
+getFiles --path IBMFiles --filemask "*.pdf" --ignorecase  --orderbyname  --fileSystem ${drive} files=value
+messageBox --title test --text "${files}" --icon "Information" --buttons "OK" --defaultbutton "FirstButton"
+createDir --path "${FolderDirectory}" fileToCopyDirectory=value
+foreach --collection "${files}" --variable "${file}"
+	messageBox --title test --text "Drive FilePath : ${file}" --icon "Information" --buttons "OK" --defaultbutton "FirstButton"
+	splitString --text "${file}" --delimiteroption "CustomDelimiter" --customdelimiter "/" --limit 2 getFilename=value
+	get --collection "${getFilename}" --index 2 filename=value
+	messageBox --title test --text "LocalFilePath :  ${FolderDirectory}\\\\${filename}" --icon "Information" --buttons "OK" --defaultbutton "FirstButton"
+	writeToFile --value "." --file "${FolderDirectory}\\\\${filename}" --encoding "Default" --fileSystem ${test}
+	downloadStorage --fileSystem ${drive} --source "${file}" --target "${FolderDirectory}\\\\${filename}"
+	messageBox --title test --text "Downloaded File : ${file}" --icon "Information" --buttons "OK" --defaultbutton "FirstButton"
+endFor
+getFiles --path "C:\\Users\\Pranay\\Documents\\IBMTesting" --filemask "*.pdf" --ignorecase  --fileSystem ${test} documents=value
+count --collection "${documents}" counter_items=value
+logMessage --message "${counter_items}" --type "Info"
+if --left "${counter_items}" --operator "Equal_To" --right 0
+	messageBox --title Test --text "No files Found in the Directory" --icon "Information" --buttons "OK" --defaultbutton "FirstButton"
+else
+	foreach --collection "${documents}" --variable "${document_path}"
+		getFileInfo --path "${document_path}" drivefilename=name
+		messageBox --title Test --text "Drive Filename : ${drivefilename}" --icon "Information" --buttons "OK" --defaultbutton "FirstButton"
+		fileToBase64 --filepath "${document_path}" --fileSystem ${test} pdf_base64=value
+		httpRequest --verb "Post" --url "http://127.0.0.1:8000/process_doc" --formatter "Json" --data "{\"base64pdfcontent\":\"${pdf_base64}\"}" --timeout "${waiting_time}" response=value statuscode=statusCode
+		messageBox --title Test --text "Status Code of API : ${statuscode}" --icon "Information" --buttons "OK" --defaultbutton "FirstButton"
+		if --left "${statuscode}" --operator "Equal_To" --right 200
+			logMessage --message "First Request Response: ${response}" --type "Info"
+			jsonToTable --json "${response}" --jsonPath "$" extractedTable=value
+			logMessage --message "${extractedTable}" --type "Info"
+			getTableCell --dataTable ${extractedTable} --column 1 --row 1 documentType=value
+			getTableCell --dataTable ${extractedTable} --column 2 --row 1 ExtractedInformation=value
+			logMessage --message "Document Type :  ${documentType}\r\n\r\nExtracted Infromation :  ${ExtractedInformation}" --type "Info"
+			if --left "${documentType}" --operator "Equal_To" --right bol
+				fileMove --from "IBMFiles/${drivefilename}" --to "${BOLDirectory}" --fileSystem ${drive}
+				jsonToTable --json "${ExtractedInformation}" --jsonPath "$" BOLInformation=value
+				logMessage --message "${BOLInformation}" --type "Info"
+				getTableCell --dataTable ${BOLInformation} --column 1 --row 1 BOLNumber=value
+				splitString --text "${drivefilename}" --delimiteroption "CustomDelimiter" --customdelimiter _ --limit 3 names=value
+				get --collection "${names}" --index 1 mailID=value
+				messageBox --title test --text "Document Sender MailID : ${mailID}" --icon "Information" --buttons "OK" --defaultbutton "FirstButton"
+				setVar --name "${doc_sender_mail}" --value "${mailID}.com"
+				replaceText --texttoparse "${doc_sender_mail}" --textpattern "-" --replacement "." final_sender_mail=value
+				messageBox --title test --text "${final_sender_mail}" --icon "Information" --buttons "OK" --defaultbutton "FirstButton"
+				setVar --name "${doc_sender_mail}" --value "${final_sender_mail}"
+				emailSend --connection ${outlookConnection} --to ${doc_sender_mail} --subject "File Processed" --bodytype "Text" --body "Your File with BOL Number: ${BOLNumber},  is Processed and updated in the Database."
+			endIf
+			if --left "${documentType}" --operator "Equal_To" --right invoice
+				fileMove --from "IBMFiles/${drivefilename}" --to "${InvoiceDirectory}" --fileSystem ${drive}
+				jsonToTable --json "${ExtractedInformation}" --jsonPath "$" InvoiceInfromation=value
+				logMessage --message "${InvoiceInfromation}" --type "Info"
+				getTableCell --dataTable ${InvoiceInfromation} --column 1 --row 1 InvoiceNumber=value
+				splitString --text "${drivefilename}" --delimiteroption "CustomDelimiter" --customdelimiter _ --limit 3 names=value
+				get --collection "${names}" --index 1 mailID=value
+				messageBox --title test --text "Document Sender MailID : ${mailID}" --icon "Information" --buttons "OK" --defaultbutton "FirstButton"
+				setVar --name "${doc_sender_mail}" --value "${mailID}.com"
+				messageBox --title test --text "${doc_sender_mail}" --icon "Information" --buttons "OK" --defaultbutton "FirstButton"
+				replaceText --texttoparse "${doc_sender_mail}" --textpattern "-" --replacement "." final_sender_mail=value
+				messageBox --title test --text "${final_sender_mail}" --icon "Information" --buttons "OK" --defaultbutton "FirstButton"
+				setVar --name "${doc_sender_mail}" --value "${final_sender_mail}"
+				emailSend --connection ${outlookConnection} --to ${doc_sender_mail} --subject "File Processed" --bodytype "Text" --body "Your File with BOL Number: ${BOLNumber},  is Processed and updated in the Database."
+			endIf
+			if --left "${documentType}" --operator "Equal_To" --right drivercopy
+				fileMove --from "IBMFiles/${drivefilename}" --to "${DrivercopyDirectory}" --fileSystem ${drive}
+				jsonToTable --json "${ExtractedInformation}" --jsonPath "$" DriverInformation=value
+				logMessage --message "${DriverInformation}" --type "Info"
+				getTableCell --dataTable ${DriverInformation} --column 1 --row 1 OrderNumber=value
+				splitString --text "${drivefilename}" --delimiteroption "CustomDelimiter" --customdelimiter _ --limit 3 names=value
+				get --collection "${names}" --index 1 mailID=value
+				messageBox --title test --text "Document Sender MailID : ${mailID}" --icon "Information" --buttons "OK" --defaultbutton "FirstButton"
+				setVar --name "${doc_sender_mail}" --value "${mailID}.com"
+				replaceText --texttoparse "${doc_sender_mail}" --textpattern "-" --replacement "." final_sender_mail=value
+				messageBox --title test --text "${final_sender_mail}" --icon "Information" --buttons "OK" --defaultbutton "FirstButton"
+				setVar --name "${doc_sender_mail}" --value "${final_sender_mail}"
+				emailSend --connection ${outlookConnection} --to ${doc_sender_mail} --subject "File Processed." --bodytype "Text" --body "Your File with Order Number: ${OrderNumber},  is Processed and updated in the Database."
+			endIf
+		endIf
+		if --left "${statuscode}" --operator "Equal_To" --right 500
+			getFileInfo --path "${document_path}" drivefilename=name
+			fileToBase64 --filepath "${document_path}" --fileSystem ${test} pdf_base64=value
+			httpRequest --verb "Post" --url "http://127.0.0.1:8000/process_doc" --formatter "Json" --data "{\"base64pdfcontent\":\"${pdf_base64}\"}" --timeout "${waiting_time}" response=value statuscode=statusCode
+			//messageBox --title Test --text "Status Code of API : ${statuscode}" --icon "Information" --buttons "OK" --defaultbutton "FirstButton"
+			if --left "${statuscode}" --operator "Equal_To" --right 200
+				logMessage --message "First Request Response: ${response}" --type "Info"
+				jsonToTable --json "${response}" --jsonPath "$" extractedTable=value
+				logMessage --message "${extractedTable}" --type "Info"
+				getTableCell --dataTable ${extractedTable} --column 1 --row 1 documentType=value
+				getTableCell --dataTable ${extractedTable} --column 2 --row 1 ExtractedInformation=value
+				logMessage --message "Document Type :  ${documentType}\r\n\r\nExtracted Infromation :  ${ExtractedInformation}" --type "Info"
+				if --left "${documentType}" --operator "Equal_To" --right bol
+					fileMove --from "IBMFiles/${drivefilename}" --to "${BOLDirectory}" --fileSystem ${drive}
+					jsonToTable --json "${ExtractedInformation}" --jsonPath "$" BOLInformation=value
+					logMessage --message "${BOLInformation}" --type "Info"
+					getTableCell --dataTable ${BOLInformation} --column 1 --row 1 BOLNumber=value
+					splitString --text "${drivefilename}" --delimiteroption "CustomDelimiter" --customdelimiter _ --limit 3 names=value
+					get --collection "${names}" --index 1 mailID=value
+					messageBox --title test --text "Document Sender MailID : ${mailID}" --icon "Information" --buttons "OK" --defaultbutton "FirstButton"
+					setVar --name "${doc_sender_mail}" --value "${mailID}.com"
+					replaceText --texttoparse "${doc_sender_mail}" --textpattern "-" --replacement "." final_sender_mail=value
+					messageBox --title test --text "${final_sender_mail}" --icon "Information" --buttons "OK" --defaultbutton "FirstButton"
+					setVar --name "${doc_sender_mail}" --value "${final_sender_mail}"
+					emailSend --connection ${outlookConnection} --to ${doc_sender_mail} --subject "File Processed" --bodytype "Text" --body "Your File with BOL Number: ${BOLNumber},  is Processed and updated in the Database."
+				endIf
+				if --left "${documentType}" --operator "Equal_To" --right invoice
+					fileMove --from "IBMFiles/${drivefilename}" --to "${InvoiceDirectory}" --fileSystem ${drive}
+					jsonToTable --json "${ExtractedInformation}" --jsonPath "$" InvoiceInfromation=value
+					logMessage --message "${InvoiceInfromation}" --type "Info"
+					getTableCell --dataTable ${InvoiceInfromation} --column 1 --row 1 InvoiceNumber=value
+					splitString --text "${drivefilename}" --delimiteroption "CustomDelimiter" --customdelimiter _ --limit 3 names=value
+					get --collection "${names}" --index 1 mailID=value
+					messageBox --title test --text "Document Sender MailID : ${mailID}" --icon "Information" --buttons "OK" --defaultbutton "FirstButton"
+					setVar --name "${doc_sender_mail}" --value "${mailID}.com"
+					replaceText --texttoparse "${doc_sender_mail}" --textpattern "-" --replacement "." final_sender_mail=value
+					messageBox --title test --text "${final_sender_mail}" --icon "Information" --buttons "OK" --defaultbutton "FirstButton"
+					setVar --name "${doc_sender_mail}" --value "${final_sender_mail}"
+					emailSend --connection ${outlookConnection} --to ${doc_sender_mail} --subject "File Processed." --bodytype "Text" --body "Your File with Invoice Number: ${InvoiceNumber},  is Processed and updated in the Database."
+				endIf
+				if --left "${documentType}" --operator "Equal_To" --right drivercopy
+					fileMove --from "IBMFiles/${drivefilename}" --to "${DrivercopyDirectory}" --fileSystem ${drive}
+					jsonToTable --json "${ExtractedInformation}" --jsonPath "$" DriverInformation=value
+					logMessage --message "${DriverInformation}" --type "Info"
+					getTableCell --dataTable ${DriverInformation} --column 1 --row 1 OrderNumber=value
+					splitString --text "${drivefilename}" --delimiteroption "CustomDelimiter" --customdelimiter _ --limit 3 names=value
+					get --collection "${names}" --index 1 mailID=value
+					messageBox --title test --text "Document Sender MailID : ${mailID}" --icon "Information" --buttons "OK" --defaultbutton "FirstButton"
+					setVar --name "${doc_sender_mail}" --value "${mailID}.com"
+					replaceText --texttoparse "${doc_sender_mail}" --textpattern "-" --replacement "." final_sender_mail=value
+					messageBox --title test --text "${final_sender_mail}" --icon "Information" --buttons "OK" --defaultbutton "FirstButton"
+					setVar --name "${doc_sender_mail}" --value "${final_sender_mail}"
+					emailSend --connection ${outlookConnection} --to ${doc_sender_mail} --subject "File Processed." --bodytype "Text" --body "Your File with Order Number: ${OrderNumber},  is Processed and updated in the Database."
+				endIf
+			endIf
+		endIf
+	endFor
+	messageBox --title Response --text "${output}" --icon "Information" --buttons "OK" --defaultbutton "FirstButton"
+endIf
