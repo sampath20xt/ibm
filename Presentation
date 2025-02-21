@@ -1,0 +1,156 @@
+Technical Presentation Speech – IBM RPA Document Processing Automation
+
+Opening: Setting the Stage
+
+“Imagine a world where document processing is seamless, where invoices, driver copies, and bills of lading are automatically sorted, classified, and responded to—without any manual intervention.”
+
+Good [morning/afternoon/evening] everyone! Today, I am excited to walk you through a powerful IBM RPA automation script that fetches PDF files from Google Drive, processes them, extracts key information, and sends real-time notifications to users.
+
+This automation saves time, reduces errors, and enhances efficiency, making it a game-changer for businesses that handle large volumes of documents.
+
+What Does This RPA Script Do?
+
+At a high level, this script performs five major functions:
+	1.	Connects to Google Drive and Outlook – to fetch and send data.
+	2.	Retrieves and downloads PDF documents – from a predefined folder.
+	3.	Sends files for processing – using an API that extracts structured information.
+	4.	Classifies and organizes the documents – into specific folders.
+	5.	Notifies the sender via email – once their document is successfully processed.
+
+Now, let’s dive into the technical details step by step.
+
+1. Connecting to External Services
+
+Before we can process any files, we need to establish connections:
+	•	Google Drive – to access and retrieve PDF files.
+	•	Microsoft Outlook – to send confirmation emails to document owners.
+
+This is done using:
+
+microsoftMailConnect --connection pranay_outlook_microsoft_outlook_email outlookConnection=value
+googleDriveConnect --name pranay_google_drive drive=value
+
+With these connections, our bot can now communicate with cloud storage and email services, ensuring a smooth workflow.
+
+2. Retrieving and Downloading PDFs
+
+The script searches Google Drive for PDFs in the “IBMFiles” directory and downloads them to a local folder for processing.
+
+Steps:
+	1.	Get a list of all available PDFs:
+
+getFiles --path IBMFiles --filemask "*.pdf" --ignorecase --orderbyname --fileSystem ${drive} files=value
+
+
+	2.	Store them in a newly created local directory:
+
+createDir --path "${FolderDirectory}" fileToCopyDirectory=value
+
+
+	3.	Download each file and store it locally:
+
+downloadStorage --fileSystem ${drive} --source "${file}" --target "${FolderDirectory}\\\\${filename}"
+
+
+
+💡 This ensures that all PDFs are ready for processing.
+
+3. Processing PDFs Through an API
+
+Once the files are downloaded, the script:
+	1.	Encodes the PDF into Base64 format for API transmission.
+
+fileToBase64 --filepath "${document_path}" --fileSystem ${test} pdf_base64=value
+
+
+	2.	Sends an HTTP POST request to the processing API.
+
+httpRequest --verb "Post" --url "http://127.0.0.1:8000/process_doc" --formatter "Json" --data "{\"base64pdfcontent\":\"${pdf_base64}\"}" --timeout "${waiting_time}" response=value statuscode=statusCode
+
+
+	3.	Receives structured data in JSON format, which contains:
+	•	Document type (Invoice, BOL, or Driver Copy)
+	•	Extracted information (e.g., Invoice Number, Order Number)
+
+If the status code is 200, we proceed with classification. If not, the script automatically retries to ensure no document is left unprocessed.
+
+4. Classifying and Organizing Documents
+
+Depending on the extracted document type, the script moves files to their respective directories:
+	1.	Bill of Lading (BOL) → Stored in IBMFiles/BOL
+	2.	Invoices → Stored in IBMFiles/Invoice
+	3.	Driver Copies → Stored in IBMFiles/DriverCopy
+
+For each document type, we extract critical identifiers:
+
+getTableCell --dataTable ${extractedTable} --column 1 --row 1 documentType=value
+getTableCell --dataTable ${extractedTable} --column 2 --row 1 ExtractedInformation=value
+
+And move the file:
+
+fileMove --from "IBMFiles/${drivefilename}" --to "${BOLDirectory}" --fileSystem ${drive}
+
+This ensures a structured and organized document storage system.
+
+5. Sending Email Notifications
+
+Now comes the exciting part—notifying the sender that their document has been successfully processed!
+	1.	Extract sender’s email from the filename:
+
+splitString --text "${drivefilename}" --delimiteroption "CustomDelimiter" --customdelimiter _ --limit 3 names=value
+get --collection "${names}" --index 1 mailID=value
+
+
+	2.	Format the email correctly:
+
+replaceText --texttoparse "${doc_sender_mail}" --textpattern "-" --replacement "." final_sender_mail=value
+
+
+	3.	Send an automated confirmation email:
+
+emailSend --connection ${outlookConnection} --to ${doc_sender_mail} --subject "File Processed" --bodytype "Text" --body "Your File with BOL Number: ${BOLNumber}, is Processed and updated in the Database."
+
+
+
+This provides real-time feedback to the document sender, improving communication and transparency.
+
+6. Handling API Failures and Retrying
+
+What if the API fails? No worries! This script automatically retries if it encounters a failure (status code 500).
+	•	It resends the document to the API.
+	•	If successful, it continues processing.
+	•	If it still fails, it logs the error for manual review.
+
+This ensures that no document is left behind.
+
+7. Final Confirmation
+
+Once all files are processed, the script displays a final message:
+
+messageBox --title Response --text "${output}" --icon "Information" --buttons "OK" --defaultbutton "FirstButton"
+
+🎉 “ALL THE FILES ARE PROCESSED SUCCESSFULLY!”
+
+This lets users know the job is complete and successful.
+
+Why is This RPA Automation Beneficial?
+
+Let’s quickly recap the key advantages of this automation:
+
+✅ Time-Saving: Reduces hours of manual work into minutes.
+✅ Error-Free: Automates classification, minimizing human errors.
+✅ Scalability: Can handle hundreds or thousands of files effortlessly.
+✅ Enhanced Communication: Sends instant email notifications for better transparency.
+✅ Failsafe System: Automatically retries failed requests, ensuring all files are processed.
+
+With IBM RPA, we are not just automating a workflow; we are building a smart, self-sufficient document processing system.
+
+Closing Thoughts
+
+So, what does this mean for businesses?
+This script is a perfect example of how RPA can transform document-heavy workflows, allowing employees to focus on more strategic tasks rather than manual data entry.
+
+“Automation is not about replacing jobs; it’s about enabling smarter work.” 🚀
+
+Thank you for your time!
+I am happy to take any questions. 😊
